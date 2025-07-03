@@ -1,3 +1,6 @@
+//umami-export.js
+import readline from 'readline/promises';
+import { stdin as input, stdout as output } from 'process';
 import fetch from 'node-fetch';
 import fs from 'fs';
 import pLimit from 'p-limit';
@@ -51,14 +54,12 @@ async function getWebsites(token) {
     return websites;
 }
 
-async function getStats(token, websiteId) {
-    const now = new Date();
-    const end = now.getTime();
-    const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).getTime();
+async function getStats(token, websiteId, startAt, endAt) {
+
     const timezone = encodeURIComponent('Europe/London');
     const unit = 'day';
 
-    const url = `${BASE_URL}/api/websites/${websiteId}/stats?startAt=${start}&endAt=${end}&unit=${unit}&timezone=${timezone}`;
+    const url = `${BASE_URL}/api/websites/${websiteId}/stats?startAt=${startAt}&endAt=${endAt}&unit=${unit}&timezone=${timezone}`;
 
     const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
@@ -99,12 +100,80 @@ async function getStats(token, websiteId) {
     }
 }
 
+async function resolveDateRange() {
+    const startEnv = process.env.START_AT;
+    const endEnv = process.env.END_AT;
+
+    if (startEnv && endEnv) {
+        return {
+            startAt: parseInt(startEnv, 10),
+            endAt: parseInt(endEnv, 10),
+        };
+    }
+
+    const rl = readline.createInterface({ input, output });
+
+    console.log('\n📅 Choose a date range:');
+    console.log('1) Last 24 hours');
+    console.log('2) Last 7 days');
+    console.log('3) Last 30 days');
+    console.log('4) Last 365 days');
+    console.log('5) Manual entry (UNIX timestamps)\n');
+
+    const choice = await rl.question('Your choice [1-5]: ');
+
+    const now = Date.now();
+
+    let startAt, endAt = now;
+
+    switch (choice.trim()) {
+        case '1':
+            startAt = now - 1 * 24 * 60 * 60 * 1000;
+            break;
+        case '2':
+            startAt = now - 7 * 24 * 60 * 60 * 1000;
+            break;
+        case '3':
+            startAt = now - 30 * 24 * 60 * 60 * 1000;
+            break;
+        case '4':
+            startAt = now - 365 * 24 * 60 * 60 * 1000;
+            break;
+        case '5':
+            const customStart = await rl.question('Enter startAt (UNIX timestamp in ms): ');
+            const customEnd = await rl.question('Enter endAt (UNIX timestamp in ms): ');
+            startAt = parseInt(customStart.trim(), 10);
+            endAt = parseInt(customEnd.trim(), 10);
+            break;
+        default:
+            console.log('⚠️ Invalid choice. Defaulting to last 30 days.');
+            startAt = now - 30 * 24 * 60 * 60 * 1000;
+    }
+
+    await rl.close();
+    return { startAt, endAt };
+}
+
+function formatDate(ms) {
+    const d = new Date(ms);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}${mm}${dd}`;
+}
+
 async function run() {
     console.time('📈 Total execution time');
 
+    const { startAt, endAt } = await resolveDateRange();
+
+    const startStr = formatDate(startAt);
+    const endStr = formatDate(endAt);
+    const filename = `umami_stats_${startStr}_${endStr}.csv`;
+
     const token = await login();
     const websites = await getWebsites(token);
-    const out = fs.createWriteStream('umami_stats_last30days.csv');
+    const out = fs.createWriteStream(filename);
     out.write('Domain,Visitors,Pageviews,Visits,Bounces,TotalTime\n');
 
     const limit = pLimit(CONCURRENCY);
@@ -121,7 +190,7 @@ async function run() {
 
     const tasks = websites.map(site =>
         limit(async () => {
-            const stats = await getStats(token, site.id);
+            const stats = await getStats(token, site.id, startAt, endAt);
             out.write(`${site.domain},${stats.visitors},${stats.pageviews},${stats.visits},${stats.bounces},${stats.totaltime}\n`);
             completed++;
             bar.update(completed, { site: site.domain });
@@ -132,6 +201,7 @@ async function run() {
     out.end(() => {
         bar.update(completed, { site: '' });
         bar.stop();
+        console.log(`📄 CSV written to: ${filename}`);
         console.timeEnd('📈 Total execution time');
     });
 }
