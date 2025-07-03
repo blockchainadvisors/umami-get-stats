@@ -119,5 +119,5 @@ This data comes **exclusively from the `/api/websites/:id/stats`** route — no 
 
 ## 🙋‍♂️ Author
 
-Created and maintained by [Laurentiu Nae](https://github.com/neylaur).
+Created and maintained by [Laurentiu Nae](https://github.com/LorenzoNey).
 Pull requests, feedback, and forks are welcome!
