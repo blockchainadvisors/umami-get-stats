@@ -1,0 +1,20 @@
+{
+  "name": "umami-get-stats",
+  "version": "1.0.0",
+  "description": "",
+  "main": "umami-export.js",
+  "scripts": {
+    "start": "node umami-export.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "cli-progress": "^3.12.0",
+    "dotenv": "16.3.1",
+    "log-update": "^6.1.0",
+    "node-fetch": "^3.3.2",
+    "p-limit": "^6.2.0"
+  }
+}
